@@ -9,6 +9,7 @@ const app = express();
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const customerRoutes = require("./routes/customer.routes");
+const accountRoutes = require("./routes/account.routes");
 
 app.use(helmet());
 
@@ -34,6 +35,9 @@ app.use("/api/admin", adminRoutes);
 
 // Customer routes
 app.use("/api/customers", customerRoutes);
+
+//Account routes
+app.use("/api", accountRoutes);
 
 app.get("/api/health", (req, res) => {
     res.status(200).json({
