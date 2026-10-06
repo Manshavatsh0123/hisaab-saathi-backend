@@ -159,7 +159,108 @@ async function getCustomerDetails(req, res, next) {
     }
 }
 
+
+const listCustomers = async (req, res) => {
+    try {
+        let {
+            search = "",
+            status,
+            page = 1,
+            limit = 20,
+        } = req.query;
+
+        // Convert pagination values to numbers
+        page = parseInt(page, 10);
+        limit = parseInt(limit, 10);
+
+        // Safe pagination defaults
+        if (isNaN(page) || page < 1) {
+            page = 1;
+        }
+
+        if (isNaN(limit) || limit < 1) {
+            limit = 20;
+        }
+
+        // Maximum 100 records per request
+        if (limit > 100) {
+            limit = 100;
+        }
+
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+
+        let query = supabase
+            .from("customers")
+            .select(
+                `
+                id,
+                customer_code,
+                full_name,
+                phone,
+                alternate_phone,
+                status,
+                created_at
+                `,
+                { count: "exact" }
+            );
+
+        if (search && search.trim()) {
+            const cleanSearch = search
+                .trim()
+                .replace(/[%_]/g, "");
+
+            query = query.or(
+                `full_name.ilike.%${cleanSearch}%,phone.ilike.%${cleanSearch}%,customer_code.ilike.%${cleanSearch}%`
+            );
+        }
+
+        if (status && status.trim()) {
+            query = query.eq("status", status.trim().toUpperCase());
+        }
+
+        query = query
+            .order("created_at", { ascending: false })
+            .range(from, to);
+
+        const { data, error, count } = await query;
+
+        if (error) {
+            console.error("List customers error:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch customers",
+                error: error.message,
+            });
+        }
+
+        const total = count || 0;
+        const totalPages = Math.ceil(total / limit);
+
+        return res.status(200).json({
+            success: true,
+            customers: data || [],
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        });
+
+    } catch (error) {
+        console.error("List customers exception:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+
 module.exports = {
     createCustomer,
     getCustomerDetails,
+    listCustomers,
 };

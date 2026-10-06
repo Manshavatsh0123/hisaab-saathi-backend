@@ -1,14 +1,21 @@
 const express = require("express");
 
-const {
-    createCustomer,
+const { createCustomer,
     getCustomerDetails,
+    listCustomers
 } = require("../controllers/customer.controller");
 
 const requireAuth = require("../middleware/auth.middleware");
 const requireRole = require("../middleware/role.middleware");
 
 const router = express.Router();
+
+router.get(
+    "/",
+    requireAuth,
+    requireRole("ADMIN"),
+    listCustomers
+);
 
 router.post(
     "/",
