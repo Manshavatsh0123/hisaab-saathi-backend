@@ -2,6 +2,7 @@ const express = require("express");
 
 const {
     createCustomer,
+    getCustomerDetails,
 } = require("../controllers/customer.controller");
 
 const requireAuth = require("../middleware/auth.middleware");
@@ -14,6 +15,13 @@ router.post(
     requireAuth,
     requireRole("ADMIN"),
     createCustomer
+);
+
+router.get(
+    "/:customerId",
+    requireAuth,
+    requireRole("ADMIN"),
+    getCustomerDetails
 );
 
 module.exports = router;
