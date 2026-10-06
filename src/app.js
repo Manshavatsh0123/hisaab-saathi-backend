@@ -11,6 +11,7 @@ const adminRoutes = require("./routes/admin.routes");
 const customerRoutes = require("./routes/customer.routes");
 const accountRoutes = require("./routes/account.routes");
 const paymentRoutes = require("./routes/payment.routes");
+const notificationRoutes = require("./routes/notification.routes");
 
 const staffRoutes = require("./routes/staff.routes");
 
@@ -47,6 +48,12 @@ app.use("/api", paymentRoutes);
 
 // staff routes
 app.use("/api/staff", staffRoutes);
+
+// Notification routes
+app.use(
+    "/api/admin/notifications",
+    notificationRoutes
+);
 
 app.get("/api/health", (req, res) => {
     res.status(200).json({

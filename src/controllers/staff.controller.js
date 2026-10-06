@@ -202,6 +202,501 @@ const createStaff = async (req, res) => {
     }
 };
 
+const getStaffCustomers = async (req, res) => {
+    try {
+        let {
+            search = "",
+            page = 1,
+            limit = 20,
+        } = req.query;
+
+        page = parseInt(page, 10);
+        limit = parseInt(limit, 10);
+
+        if (isNaN(page) || page < 1) {
+            page = 1;
+        }
+
+        if (isNaN(limit) || limit < 1) {
+            limit = 20;
+        }
+
+        // Maximum 100 customers per request
+        if (limit > 100) {
+            limit = 100;
+        }
+
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+
+
+        let query = supabase
+            .from("customers")
+            .select(
+                `
+                id,
+                customer_code,
+                full_name,
+                phone,
+                alternate_phone,
+                status,
+                created_at
+                `,
+                { count: "exact" }
+            );
+
+
+        if (search && search.trim()) {
+            const cleanSearch = search
+                .trim()
+                .replace(/[%_]/g, "");
+
+            query = query.or(
+                `full_name.ilike.%${cleanSearch}%,phone.ilike.%${cleanSearch}%,customer_code.ilike.%${cleanSearch}%`
+            );
+        }
+
+        query = query
+            .order("created_at", {
+                ascending: false,
+            })
+            .range(from, to);
+
+        const {
+            data,
+            error,
+            count,
+        } = await query;
+
+        if (error) {
+            console.error(
+                "Staff customer search error:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch customers",
+                error: error.message,
+            });
+        }
+
+        const total = count || 0;
+        const totalPages = Math.ceil(total / limit);
+
+        return res.status(200).json({
+            success: true,
+
+            customers: data || [],
+
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+            },
+        });
+
+    } catch (error) {
+        console.error(
+            "Staff customer search exception:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+
+const getStaffCustomerDetails = async (req, res) => {
+    try {
+        const { customerId } = req.params;
+
+        const uuidRegex =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+        if (!uuidRegex.test(customerId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid customer ID",
+            });
+        }
+
+        const {
+            data: customer,
+            error: customerError,
+        } = await supabase
+            .from("customers")
+            .select(`
+                id,
+                customer_code,
+                full_name,
+                phone,
+                alternate_phone,
+                status,
+                created_at
+            `)
+            .eq("id", customerId)
+            .single();
+
+        if (customerError) {
+            if (customerError.code === "PGRST116") {
+                return res.status(404).json({
+                    success: false,
+                    message: "Customer not found",
+                });
+            }
+
+            console.error(
+                "Staff customer details error:",
+                customerError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch customer",
+                error: customerError.message,
+            });
+        }
+
+        if (customer.status !== "ACTIVE") {
+            return res.status(400).json({
+                success: false,
+                message: "Customer account is inactive",
+            });
+        }
+
+        const {
+            data: accounts,
+            error: accountsError,
+        } = await supabase
+            .from("customer_accounts")
+            .select(`
+                id,
+                customer_id,
+                account_number,
+                scheme,
+                account_name,
+                collection_amount,
+                frequency,
+                start_date,
+                maturity_date,
+                previous_paid,
+                status
+            `)
+            .eq("customer_id", customerId)
+            .eq("status", "ACTIVE")
+            .order("created_at", {
+                ascending: false,
+            });
+
+        if (accountsError) {
+            console.error(
+                "Staff customer accounts error:",
+                accountsError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch customer accounts",
+                error: accountsError.message,
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+
+            customer: {
+                id: customer.id,
+                customer_code: customer.customer_code,
+                full_name: customer.full_name,
+                phone: customer.phone,
+                alternate_phone: customer.alternate_phone,
+                status: customer.status,
+                created_at: customer.created_at,
+            },
+
+            accounts: accounts || [],
+        });
+
+    } catch (error) {
+        console.error(
+            "Staff customer details exception:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+
+const submitStaffCollection = async (req, res) => {
+    try {
+        const {
+            customer_id,
+            account_id,
+            amount,
+            payment_date,
+        } = req.body;
+
+        if (
+            !customer_id ||
+            !account_id ||
+            amount === undefined ||
+            !payment_date
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "customer_id, account_id, amount and payment_date are required",
+            });
+        }
+
+
+        const numericAmount = Number(amount);
+
+        if (
+            !Number.isFinite(numericAmount) ||
+            numericAmount <= 0
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Amount must be greater than 0",
+            });
+        }
+
+        const paymentDate = new Date(payment_date);
+
+        if (Number.isNaN(paymentDate.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment date",
+            });
+        }
+
+
+        const {
+            data: customer,
+            error: customerError,
+        } = await supabase
+            .from("customers")
+            .select(
+                "id, full_name, customer_code, status"
+            )
+            .eq("id", customer_id)
+            .single();
+
+        if (customerError || !customer) {
+            return res.status(404).json({
+                success: false,
+                message: "Customer not found",
+            });
+        }
+
+        if (customer.status !== "ACTIVE") {
+            return res.status(400).json({
+                success: false,
+                message: "Customer is inactive",
+            });
+        }
+
+
+        const {
+            data: account,
+            error: accountError,
+        } = await supabase
+            .from("customer_accounts")
+            .select(`
+                id,
+                customer_id,
+                account_number,
+                scheme,
+                account_name,
+                collection_amount,
+                frequency,
+                status
+            `)
+            .eq("id", account_id)
+            .eq("customer_id", customer_id)
+            .single();
+
+        if (accountError || !account) {
+            return res.status(404).json({
+                success: false,
+                message:
+                    "Account not found for this customer",
+            });
+        }
+
+
+        if (account.status !== "ACTIVE") {
+            return res.status(400).json({
+                success: false,
+                message: "Account is inactive",
+            });
+        }
+
+        const {
+            data: staffProfile,
+            error: staffProfileError,
+        } = await supabase
+            .from("profiles")
+            .select("id, full_name, username")
+            .eq("id", req.user.id)
+            .eq("role", "STAFF")
+            .eq("status", "ACTIVE")
+            .single();
+
+        if (staffProfileError || !staffProfile) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "Active staff profile not found",
+            });
+        }
+
+        const {
+            data: paymentId,
+            error: paymentError,
+        } = await supabase.rpc("submit_payment", {
+            p_customer_id: customer_id,
+            p_account_id: account_id,
+            p_amount: numericAmount,
+            p_payment_date: payment_date,
+            p_created_by: req.user.id,
+        });
+
+        if (paymentError) {
+            console.error(
+                "Submit payment RPC error:",
+                paymentError
+            );
+
+            return res.status(400).json({
+                success: false,
+                message: paymentError.message,
+            });
+        }
+
+        const {
+            data: admins,
+            error: adminsError,
+        } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("role", "ADMIN")
+            .eq("status", "ACTIVE");
+
+        if (adminsError) {
+            console.error(
+                "Admin profiles fetch error:",
+                adminsError
+            );
+
+            return res.status(201).json({
+                success: true,
+                message:
+                    "Collection submitted successfully, but admin notification could not be created",
+                payment: {
+                    id: paymentId,
+                    customer_id: customer.id,
+                    customer_name: customer.full_name,
+                    customer_code: customer.customer_code,
+                    account_id: account.id,
+                    account_number: account.account_number,
+                    scheme: account.scheme,
+                    amount: numericAmount,
+                    payment_date,
+                    status: "PENDING",
+                    submitted_by: req.user.id,
+                },
+                notification_created: false,
+            });
+        }
+
+
+        const staffName =
+            staffProfile.full_name ||
+            staffProfile.username ||
+            "Staff";
+
+        const notificationRows = (admins || []).map(
+            (admin) => ({
+                recipient_id: admin.id,
+                payment_id: paymentId,
+                type: "PAYMENT_SUBMITTED",
+                title: "New Collection",
+                message: `${staffName} submitted ₹${numericAmount} for ${customer.full_name}`,
+                is_read: false,
+            })
+        );
+
+        let notificationCreated = false;
+
+        if (notificationRows.length > 0) {
+            const {
+                error: notificationError,
+            } = await supabase
+                .from("notifications")
+                .insert(notificationRows);
+
+            if (notificationError) {
+                console.error(
+                    "Notification creation error:",
+                    notificationError
+                );
+            } else {
+                notificationCreated = true;
+            }
+        }
+
+        return res.status(201).json({
+            success: true,
+            message:
+                "Collection submitted successfully",
+
+            payment: {
+                id: paymentId,
+                customer_id: customer.id,
+                customer_name: customer.full_name,
+                customer_code: customer.customer_code,
+
+                account_id: account.id,
+                account_number: account.account_number,
+                scheme: account.scheme,
+
+                amount: numericAmount,
+                payment_date,
+
+                status: "PENDING",
+
+                submitted_by: req.user.id,
+            },
+
+            notification_created:
+                notificationCreated,
+        });
+
+    } catch (error) {
+        console.error(
+            "Submit staff collection exception:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+
 module.exports = {
     createStaff,
+    getStaffCustomers,
+    getStaffCustomerDetails,
+    submitStaffCollection,
 };
