@@ -7,6 +7,8 @@ const supabase = require("./config/supabase");
 
 const app = express();
 const authRoutes = require("./routes/auth.routes");
+const adminRoutes = require("./routes/admin.routes");
+const customerRoutes = require("./routes/customer.routes");
 
 app.use(helmet());
 
@@ -26,6 +28,12 @@ if (process.env.NODE_ENV === "development") {
 
 // Auth routes
 app.use("/api/auth", authRoutes);
+
+// Admin routes
+app.use("/api/admin", adminRoutes);
+
+// Customer routes
+app.use("/api/customers", customerRoutes);
 
 app.get("/api/health", (req, res) => {
     res.status(200).json({
