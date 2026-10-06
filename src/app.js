@@ -6,6 +6,7 @@ const morgan = require("morgan");
 const supabase = require("./config/supabase");
 
 const app = express();
+const authRoutes = require("./routes/auth.routes");
 
 app.use(helmet());
 
@@ -22,6 +23,9 @@ app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV === "development") {
     app.use(morgan("dev"));
 }
+
+// Auth routes
+app.use("/api/auth", authRoutes);
 
 app.get("/api/health", (req, res) => {
     res.status(200).json({
