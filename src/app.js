@@ -12,6 +12,8 @@ const customerRoutes = require("./routes/customer.routes");
 const accountRoutes = require("./routes/account.routes");
 const paymentRoutes = require("./routes/payment.routes");
 
+const staffRoutes = require("./routes/staff.routes");
+
 app.use(helmet());
 
 app.use(
@@ -42,6 +44,9 @@ app.use("/api", accountRoutes);
 
 // Payment routes
 app.use("/api", paymentRoutes);
+
+// staff routes
+app.use("/api/staff", staffRoutes);
 
 app.get("/api/health", (req, res) => {
     res.status(200).json({

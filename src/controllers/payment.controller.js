@@ -625,7 +625,6 @@ const getAdminCollections = async (req, res) => {
     }
 };
 
-
 const getAdminCollectionDetails = async (req, res) => {
     try {
         const { paymentId } = req.params;
