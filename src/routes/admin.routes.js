@@ -2,7 +2,7 @@ const express = require("express");
 
 const requireAuth = require("../middleware/auth.middleware");
 const requireRole = require("../middleware/role.middleware");
-const { approveAdminCollection, rejectAdminCollection,reversePayment } = require("../controllers/admin.controller");
+const { approveAdminCollection, rejectAdminCollection, reversePayment, getAdminStaff, getAdminStaffDetails, updateAdminStaffStatus, getAdminDashboardSummary, getAdminRecentCollections, getAdminRecentNotifications } = require("../controllers/admin.controller");
 
 const router = express.Router();
 
@@ -46,6 +46,48 @@ router.post(
     requireAuth,
     requireRole("ADMIN"),
     reversePayment
+);
+
+router.get(
+    "/staff",
+    requireAuth,
+    requireRole("ADMIN"),
+    getAdminStaff
+);
+
+router.get(
+    "/staff/:staffId",
+    requireAuth,
+    requireRole("ADMIN"),
+    getAdminStaffDetails
+);
+
+router.patch(
+    "/staff/:staffId/status",
+    requireAuth,
+    requireRole("ADMIN"),
+    updateAdminStaffStatus
+);
+
+router.get(
+    "/dashboard/summary",
+    requireAuth,
+    requireRole("ADMIN"),
+    getAdminDashboardSummary
+);
+
+router.get(
+    "/dashboard/recent-collections",
+    requireAuth,
+    requireRole("ADMIN"),
+    getAdminRecentCollections
+);
+
+router.get(
+    "/dashboard/recent-notifications",
+    requireAuth,
+    requireRole("ADMIN"),
+    getAdminRecentNotifications
 );
 
 module.exports = router;

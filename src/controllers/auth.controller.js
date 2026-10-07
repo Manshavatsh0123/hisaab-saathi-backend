@@ -226,7 +226,178 @@ async function staffLogin(req, res, next) {
     }
 }
 
+const customerLogin = async (req, res, next) => {
+    try {
+        const {
+            email,
+            password,
+        } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Email and password are required",
+            });
+        }
+
+        const {
+            data: authData,
+            error: authError,
+        } = await supabaseAuth.auth.signInWithPassword({
+            email: email.trim().toLowerCase(),
+            password,
+        });
+
+        if (authError || !authData?.user) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password",
+            });
+        }
+
+        const user = authData.user;
+
+        const {
+            data: profile,
+            error: profileError,
+        } = await supabase
+            .from("profiles")
+            .select(`
+                id,
+                username,
+                full_name,
+                phone,
+                role,
+                status
+            `)
+            .eq("id", user.id)
+            .maybeSingle();
+
+        if (profileError) {
+            console.error(
+                "Customer login profile error:",
+                profileError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch customer profile",
+            });
+        }
+
+        if (!profile) {
+            return res.status(404).json({
+                success: false,
+                message: "Customer profile not found",
+            });
+        }
+
+        if (profile.role !== "CUSTOMER") {
+            return res.status(403).json({
+                success: false,
+                message: "Customer access required",
+            });
+        }
+
+        if (profile.status !== "ACTIVE") {
+            return res.status(403).json({
+                success: false,
+                message: "Customer account is inactive",
+            });
+        }
+
+        const {
+            data: customer,
+            error: customerError,
+        } = await supabase
+            .from("customers")
+            .select(`
+                id,
+                user_id,
+                customer_code,
+                full_name,
+                phone,
+                alternate_phone,
+                status,
+                created_at
+            `)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+        if (customerError) {
+            console.error(
+                "Customer login customer lookup error:",
+                customerError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch customer",
+            });
+        }
+
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                message: "Customer record not found",
+            });
+        }
+
+        if (customer.status !== "ACTIVE") {
+            return res.status(403).json({
+                success: false,
+                message: "Customer account is inactive",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Customer login successful",
+
+            user: {
+                id: user.id,
+                email: user.email,
+            },
+
+            profile: {
+                id: profile.id,
+                username: profile.username,
+                full_name: profile.full_name,
+                phone: profile.phone,
+                role: profile.role,
+                status: profile.status,
+            },
+
+            customer: {
+                id: customer.id,
+                user_id: customer.user_id,
+                customer_code: customer.customer_code,
+                full_name: customer.full_name,
+                phone: customer.phone,
+                alternate_phone:
+                    customer.alternate_phone,
+                status: customer.status,
+                created_at: customer.created_at,
+            },
+
+            session: authData.session,
+        });
+
+    } catch (error) {
+        console.error(
+            "Customer login exception:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+
 module.exports = {
     login,
     staffLogin,
+    customerLogin,
 };
