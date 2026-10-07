@@ -5,6 +5,8 @@ const {
     getStaffCustomers,
     getStaffCustomerDetails,
     submitStaffCollection,
+    getStaffCollections,
+    getStaffCollectionDetails,
 } = require("../controllers/staff.controller");
 
 const requireAuth = require("../middleware/auth.middleware");
@@ -38,6 +40,20 @@ router.post(
     requireAuth,
     requireRole("STAFF"),
     submitStaffCollection
+);
+
+router.get(
+    "/collections",
+    requireAuth,
+    requireRole("STAFF"),
+    getStaffCollections
+);
+
+router.get(
+    "/collections/:paymentId",
+    requireAuth,
+    requireRole("STAFF"),
+    getStaffCollectionDetails
 );
 
 module.exports = router;

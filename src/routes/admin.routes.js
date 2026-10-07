@@ -2,6 +2,7 @@ const express = require("express");
 
 const requireAuth = require("../middleware/auth.middleware");
 const requireRole = require("../middleware/role.middleware");
+const { approveAdminCollection, rejectAdminCollection,reversePayment } = require("../controllers/admin.controller");
 
 const router = express.Router();
 
@@ -24,6 +25,27 @@ router.get(
             },
         });
     }
+);
+
+router.post(
+    "/collections/:paymentId/approve",
+    requireAuth,
+    requireRole("ADMIN"),
+    approveAdminCollection
+);
+
+router.post(
+    "/collections/:paymentId/reject",
+    requireAuth,
+    requireRole("ADMIN"),
+    rejectAdminCollection
+);
+
+router.post(
+    "/collections/:paymentId/reverse",
+    requireAuth,
+    requireRole("ADMIN"),
+    reversePayment
 );
 
 module.exports = router;

@@ -694,9 +694,424 @@ const submitStaffCollection = async (req, res) => {
     }
 };
 
+
+const getStaffCollections = async (req, res) => {
+    try {
+        const staffId = req.user.id;
+
+        const {
+            status,
+            page = 1,
+            limit = 20,
+        } = req.query;
+
+        const pageNumber = Math.max(Number(page) || 1, 1);
+        const limitNumber = Math.min(
+            Math.max(Number(limit) || 20, 1),
+            100
+        );
+
+        const from = (pageNumber - 1) * limitNumber;
+        const to = from + limitNumber - 1;
+
+        const allowedStatuses = [
+            "PENDING",
+            "APPROVED",
+            "REJECTED",
+            "REVERSED",
+        ];
+
+        if (status && !allowedStatuses.includes(status)) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid status. Allowed values: PENDING, APPROVED, REJECTED, REVERSED",
+            });
+        }
+
+        let query = supabase
+            .from("payments")
+            .select(
+                `
+                id,
+                customer_id,
+                account_id,
+                amount,
+                payment_date,
+                status,
+                submitted_at,
+                approved_at,
+                rejected_at,
+                reversed_at,
+                rejection_reason,
+                reversal_reason,
+                receipt_number,
+                created_at,
+                updated_at
+                `,
+                { count: "exact" }
+            )
+            .eq("created_by", staffId)
+            .order("created_at", {
+                ascending: false,
+            })
+            .range(from, to);
+
+        if (status) {
+            query = query.eq("status", status);
+        }
+
+        const {
+            data: payments,
+            error: paymentError,
+            count,
+        } = await query;
+
+        if (paymentError) {
+            console.error(
+                "Get staff collections error:",
+                paymentError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to fetch collections",
+                error: paymentError.message,
+            });
+        }
+
+        // ========================================
+        // GET CUSTOMER + ACCOUNT DETAILS
+        // ========================================
+
+        const collections = [];
+
+        for (const payment of payments || []) {
+            // Customer
+            const {
+                data: customer,
+                error: customerError,
+            } = await supabase
+                .from("customers")
+                .select(
+                    `
+                    id,
+                    customer_code,
+                    full_name,
+                    phone
+                    `
+                )
+                .eq("id", payment.customer_id)
+                .single();
+
+            if (customerError) {
+                console.error(
+                    "Customer fetch error:",
+                    customerError
+                );
+            }
+
+            // Account
+            const {
+                data: account,
+                error: accountError,
+            } = await supabase
+                .from("customer_accounts")
+                .select(
+                    `
+                    id,
+                    account_number,
+                    scheme,
+                    account_name,
+                    collection_amount,
+                    frequency
+                    `
+                )
+                .eq("id", payment.account_id)
+                .single();
+
+            if (accountError) {
+                console.error(
+                    "Account fetch error:",
+                    accountError
+                );
+            }
+
+            collections.push({
+                id: payment.id,
+
+                customer: customer || null,
+
+                account: account || null,
+
+                amount: payment.amount,
+
+                payment_date: payment.payment_date,
+
+                status: payment.status,
+
+                receipt_number:
+                    payment.receipt_number,
+
+                submitted_at:
+                    payment.submitted_at,
+
+                approved_at:
+                    payment.approved_at,
+
+                rejected_at:
+                    payment.rejected_at,
+
+                reversed_at:
+                    payment.reversed_at,
+
+                rejection_reason:
+                    payment.rejection_reason,
+
+                reversal_reason:
+                    payment.reversal_reason,
+
+                created_at:
+                    payment.created_at,
+
+                updated_at:
+                    payment.updated_at,
+            });
+        }
+
+        const total = count || 0;
+
+        const totalPages =
+            total === 0
+                ? 0
+                : Math.ceil(total / limitNumber);
+
+
+        return res.status(200).json({
+            success: true,
+
+            collections,
+
+            pagination: {
+                page: pageNumber,
+                limit: limitNumber,
+                total,
+                totalPages,
+            },
+        });
+
+    } catch (error) {
+        console.error(
+            "Get staff collections exception:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+
+const getStaffCollectionDetails = async (req, res) => {
+    try {
+        const { paymentId } = req.params;
+        const staffId = req.user.id;
+
+
+        if (!paymentId) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment ID is required",
+            });
+        }
+
+        const {
+            data: payment,
+            error: paymentError,
+        } = await supabase
+            .from("payments")
+            .select(`
+                id,
+                customer_id,
+                account_id,
+                amount,
+                payment_date,
+                status,
+                reference_number,
+                receipt_number,
+                notes,
+                submitted_at,
+                approved_at,
+                rejected_at,
+                reversed_at,
+                rejection_reason,
+                reversal_reason,
+                created_at,
+                updated_at,
+                created_by,
+                approved_by,
+                rejected_by,
+                reversed_by
+            `)
+            .eq("id", paymentId)
+            .eq("created_by", staffId)
+            .single();
+
+        if (paymentError || !payment) {
+            return res.status(404).json({
+                success: false,
+                message: "Collection not found",
+            });
+        }
+
+        const {
+            data: customer,
+            error: customerError,
+        } = await supabase
+            .from("customers")
+            .select(`
+                id,
+                customer_code,
+                full_name,
+                phone,
+                alternate_phone,
+                status
+            `)
+            .eq("id", payment.customer_id)
+            .single();
+
+        if (customerError || !customer) {
+            return res.status(404).json({
+                success: false,
+                message: "Customer not found",
+            });
+        }
+
+        const {
+            data: account,
+            error: accountError,
+        } = await supabase
+            .from("customer_accounts")
+            .select(`
+                id,
+                account_number,
+                scheme,
+                account_name,
+                collection_amount,
+                frequency,
+                start_date,
+                maturity_date,
+                status
+            `)
+            .eq("id", payment.account_id)
+            .eq("customer_id", payment.customer_id)
+            .single();
+
+        if (accountError || !account) {
+            return res.status(404).json({
+                success: false,
+                message: "Account not found",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+
+            collection: {
+                id: payment.id,
+
+                customer: {
+                    id: customer.id,
+                    customer_code: customer.customer_code,
+                    full_name: customer.full_name,
+                    phone: customer.phone,
+                    alternate_phone:
+                        customer.alternate_phone,
+                    status: customer.status,
+                },
+
+                account: {
+                    id: account.id,
+                    account_number:
+                        account.account_number,
+                    scheme: account.scheme,
+                    account_name:
+                        account.account_name,
+                    collection_amount:
+                        account.collection_amount,
+                    frequency:
+                        account.frequency,
+                    start_date:
+                        account.start_date,
+                    maturity_date:
+                        account.maturity_date,
+                    status: account.status,
+                },
+
+                amount: payment.amount,
+
+                payment_date:
+                    payment.payment_date,
+
+                status:
+                    payment.status,
+
+                reference_number:
+                    payment.reference_number,
+
+                receipt_number:
+                    payment.receipt_number,
+
+                notes:
+                    payment.notes,
+
+                // Timeline
+                submitted_at:
+                    payment.submitted_at,
+
+                approved_at:
+                    payment.approved_at,
+
+                rejected_at:
+                    payment.rejected_at,
+
+                reversed_at:
+                    payment.reversed_at,
+
+                // Reasons
+                rejection_reason:
+                    payment.rejection_reason,
+
+                reversal_reason:
+                    payment.reversal_reason,
+
+                created_at:
+                    payment.created_at,
+
+                updated_at:
+                    payment.updated_at,
+            },
+        });
+
+    } catch (error) {
+        console.error(
+            "Get staff collection details exception:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+
 module.exports = {
     createStaff,
     getStaffCustomers,
     getStaffCustomerDetails,
     submitStaffCollection,
+    getStaffCollections,
+    getStaffCollectionDetails,
 };
